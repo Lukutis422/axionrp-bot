@@ -11,9 +11,12 @@ const {
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
+// KEEP ALIVE + SLASH DEPLOY
 const keepAlive = require("./keepAlive");
+require("./deploy-commands"); // AUTOMATINIS SLASH KOMANDŲ DEPLOY
 keepAlive();
 
+// === KONFIGURACIJA ===
 const STAFF_ROLE_ID = "1468019100717416681";
 const TICKET_CATEGORY_ID = "1467896081743610059";
 const WELCOME_CHANNEL_ID = "1467895298302148608";
@@ -21,6 +24,7 @@ const WELCOME_CHANNEL_ID = "1467895298302148608";
 const FIVEM_IP = "109.230.238.164";
 const FIVEM_PORT = "30610";
 
+// === DISCORD CLIENT ===
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -32,6 +36,7 @@ client.once("ready", () => {
   console.log("AxionRP bot online");
 });
 
+// === WELCOME SISTEMA ===
 client.on("guildMemberAdd", member => {
   const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
   if (!channel) return;
@@ -45,9 +50,11 @@ client.on("guildMemberAdd", member => {
   channel.send({ embeds: [embed] });
 });
 
+// === SLASH KOMANDOS ===
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
+  // /status
   if (interaction.commandName === "status") {
     try {
       const res = await fetch(`http://${FIVEM_IP}:${FIVEM_PORT}/dynamic.json`);
@@ -63,14 +70,16 @@ client.on("interactionCreate", async interaction => {
 
       interaction.reply({ embeds: [embed] });
     } catch {
-      interaction.reply("Server offline");
+      interaction.reply("❌ Server offline");
     }
   }
 
+  // /rules
   if (interaction.commandName === "rules") {
     interaction.reply("📜 Jokio fail RP, jokio cheat, gerbk kitus.");
   }
 
+  // /ticket
   if (interaction.commandName === "ticket") {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -79,10 +88,15 @@ client.on("interactionCreate", async interaction => {
         .setStyle(ButtonStyle.Primary)
     );
 
-    interaction.reply({ content: "Reikia pagalbos?", components: [row], ephemeral: true });
+    interaction.reply({
+      content: "Reikia pagalbos?",
+      components: [row],
+      ephemeral: true
+    });
   }
 });
 
+// === TICKET MYGTUKAS ===
 client.on("interactionCreate", async interaction => {
   if (!interaction.isButton()) return;
   if (interaction.customId !== "open_ticket") return;
@@ -98,7 +112,8 @@ client.on("interactionCreate", async interaction => {
   });
 
   channel.send(`🎟️ ${interaction.user}, staff netrukus atsakys.`);
-  interaction.reply({ content: "Ticket sukurtas", ephemeral: true });
+  interaction.reply({ content: "✅ Ticket sukurtas", ephemeral: true });
 });
 
+// === LOGIN ===
 client.login(process.env.TOKEN);
