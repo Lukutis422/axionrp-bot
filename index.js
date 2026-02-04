@@ -3,203 +3,126 @@ const {
   GatewayIntentBits,
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
+  StringSelectMenuBuilder,
+  ChannelType,
   PermissionsBitField
 } = require("discord.js");
 
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
-const keepAlive = require("./keepAlive");
-keepAlive();
+/* ====== KONFIGŪRACIJA ====== */
+const TOKEN = process.env.TOKEN;
 
-// ===== KONFIG =====
-const LOG_CHANNEL_ID = "1468425536505253958";
-const STAFF_ROLES = [
-  "1468019100717416681",
-  "1468019197387870471"
-];
-
-const WELCOME_CHANNEL_ID = "1467895298302148608";
-const TICKET_CATEGORY_ID = "1467896081743610059";
+const TICKET_CHANNEL_ID = "1467896081743610059"; // ticket kanalas
+const STAFF_ROLE_ID = "1468019197387870471";     // staff role
+const STATUS_CHANNEL_ID = "1467895501935349780"; // status kanalas
 
 const FIVEM_IP = "109.230.238.164";
 const FIVEM_PORT = "30610";
 
-// ===== CLIENT =====
+const LOGO_URL = "https://i.imgur.com/8QZQZQZ.png"; // pakeisi i savo logo
+/* ========================== */
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.GuildMembers
   ]
 });
 
-client.once("ready", () => {
-  console.log("AxionRP bot online");
+/* ===== READY ===== */
+client.once("ready", async () => {
+  console.log("✅ AxionRP bot online");
+  await updateStatus();
+  setInterval(updateStatus, 60 * 1000);
 });
 
-// ===== HELPERS =====
-function isStaff(member) {
-  return member.roles.cache.some(r => STAFF_ROLES.includes(r.id));
+/* ===== SERVER STATUS ===== */
+async function updateStatus() {
+  try {
+    const res = await fetch(`http://${FIVEM_IP}:${FIVEM_PORT}/dynamic.json`);
+    const data = await res.json();
+
+    const embed = new EmbedBuilder()
+      .setTitle("🚓 AXIONRP SERVER STATUS")
+      .setColor(0x2ecc71)
+      .setThumbnail(LOGO_URL)
+      .addFields(
+        { name: "📡 Statusas", value: "🟢 **ONLINE**", inline: true },
+        { name: "👥 Žaidėjai", value: `${data.clients} / ${data.sv_maxclients}`, inline: true }
+      )
+      .setFooter({ text: "AxionRP • Atnaujinta" })
+      .setTimestamp();
+
+    const channel = await client.channels.fetch(STATUS_CHANNEL_ID);
+    const messages = await channel.messages.fetch({ limit: 1 });
+
+    if (messages.size === 0) {
+      channel.send({ embeds: [embed] });
+    } else {
+      messages.first().edit({ embeds: [embed] });
+    }
+  } catch {
+    console.log("⚠️ FiveM serveris nepasiekiamas");
+  }
 }
 
-function sendLog(guild, embed) {
-  const ch = guild.channels.cache.get(LOG_CHANNEL_ID);
-  if (ch) ch.send({ embeds: [embed] });
-}
-
-// ===== WELCOME =====
-client.on("guildMemberAdd", member => {
-  const ch = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
-  if (!ch) return;
-
-  ch.send({
-    embeds: [
-      new EmbedBuilder()
-        .setTitle("👋 Sveikas atvykęs į AxionRP")
-        .setDescription(`Sveikas ${member}! Linkim gero RP 💙`)
-        .setColor("Blue")
-        .setTimestamp()
-    ]
-  });
-
-  sendLog(member.guild,
-    new EmbedBuilder()
-      .setTitle("🟢 Narys prisijungė")
-      .setDescription(member.user.tag)
-      .setColor("Green")
-      .setTimestamp()
-  );
-});
-
-// ===== SLASH KOMANDOS =====
+/* ===== SLASH KOMANDOS ===== */
 client.on("interactionCreate", async interaction => {
-  if (!interaction.isChatInputCommand()) return;
+  if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === "ticket") {
+      const embed = new EmbedBuilder()
+        .setTitle("🎟️ AxionRP Pagalbos Centras")
+        .setDescription("Pasirinkite kategoriją")
+        .setColor(0x5865f2)
+        .setImage(LOGO_URL);
 
-  const cmd = interaction.commandName;
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId("ticket_category")
+        .setPlaceholder("Pasirinkite kategoriją")
+        .addOptions([
+          { label: "Pranešti apie pažeidimą", value: "report", emoji: "🚨" },
+          { label: "Kompensacijos", value: "kompensacija", emoji: "💰" },
+          { label: "Automobilių edit", value: "auto", emoji: "🚗" },
+          { label: "Atsiblokavimas", value: "unban", emoji: "🔓" },
+          { label: "Serverio klaidos", value: "bug", emoji: "⚠️" },
+          { label: "RP užklausos", value: "rp", emoji: "🎭" },
+          { label: "Darbo keitimas", value: "job", emoji: "💼" },
+          { label: "Pagalba", value: "help", emoji: "❓" }
+        ]);
 
-  if (["ban","kick","timeout","clear"].includes(cmd)) {
-    if (!isStaff(interaction.member)) {
-      return interaction.reply({ content: "❌ Neturi teisių", ephemeral: true });
+      const row = new ActionRowBuilder().addComponents(menu);
+      await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
     }
   }
 
-  // STATUS
-  if (cmd === "status") {
-    try {
-      const res = await fetch(`http://${FIVEM_IP}:${FIVEM_PORT}/dynamic.json`);
-      const d = await res.json();
+  /* ===== TICKET THREAD ===== */
+  if (interaction.isStringSelectMenu() && interaction.customId === "ticket_category") {
+    const thread = await interaction.channel.threads.create({
+      name: `ticket-${interaction.user.username}`,
+      type: ChannelType.PrivateThread,
+      invitable: false
+    });
 
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("🟢 AxionRP Status")
-            .addFields(
-              { name: "Žaidėjai", value: `${d.clients}/${d.sv_maxclients}`, inline: true },
-              { name: "Map", value: d.mapname || "Nežinoma", inline: true }
-            )
-            .setColor("Green")
-        ]
-      });
-    } catch {
-      return interaction.reply("🔴 Serveris offline");
-    }
-  }
+    await thread.members.add(interaction.user.id);
 
-  // RULES
-  if (cmd === "rules") {
-    return interaction.reply("📜 Jokio fail RP, jokio cheat, gerbk kitus.");
-  }
+    const embed = new EmbedBuilder()
+      .setTitle("🎟️ Naujas ticket")
+      .setDescription(`**Kategorija:** ${interaction.values[0]}`)
+      .setColor(0x2ecc71)
+      .addFields(
+        { name: "👤 Vartotojas", value: `<@${interaction.user.id}>` }
+      )
+      .setThumbnail(LOGO_URL);
 
-  // CLEAR
-  if (cmd === "clear") {
-    const count = interaction.options.getInteger("kiekis");
-    const msgs = await interaction.channel.bulkDelete(count, true);
+    await thread.send({
+      content: `<@&${STAFF_ROLE_ID}>`,
+      embeds: [embed]
+    });
 
-    interaction.reply({ content: `🧹 Išvalyta ${msgs.size}`, ephemeral: true });
-
-    sendLog(interaction.guild,
-      new EmbedBuilder()
-        .setTitle("🧹 CLEAR")
-        .addFields(
-          { name: "Staff", value: interaction.user.tag },
-          { name: "Kanalas", value: interaction.channel.name },
-          { name: "Kiekis", value: msgs.size.toString() }
-        )
-        .setColor("Blue")
-        .setTimestamp()
-    );
-  }
-
-  // BAN
-  if (cmd === "ban") {
-    const u = interaction.options.getUser("narys");
-    const r = interaction.options.getString("priezastis") || "Nenurodyta";
-
-    await interaction.guild.members.ban(u.id, { reason: r });
-    interaction.reply({ content: `🔨 ${u.tag} užblokuotas`, ephemeral: true });
-
-    sendLog(interaction.guild,
-      new EmbedBuilder()
-        .setTitle("🔨 BAN")
-        .addFields(
-          { name: "Narys", value: u.tag },
-          { name: "Staff", value: interaction.user.tag },
-          { name: "Priežastis", value: r }
-        )
-        .setColor("Red")
-        .setTimestamp()
-    );
-  }
-
-  // KICK
-  if (cmd === "kick") {
-    const u = interaction.options.getUser("narys");
-    const r = interaction.options.getString("priezastis") || "Nenurodyta";
-
-    await interaction.guild.members.kick(u.id, r);
-    interaction.reply({ content: `👢 ${u.tag} išmestas`, ephemeral: true });
-
-    sendLog(interaction.guild,
-      new EmbedBuilder()
-        .setTitle("👢 KICK")
-        .addFields(
-          { name: "Narys", value: u.tag },
-          { name: "Staff", value: interaction.user.tag },
-          { name: "Priežastis", value: r }
-        )
-        .setColor("Orange")
-        .setTimestamp()
-    );
-  }
-
-  // TIMEOUT
-  if (cmd === "timeout") {
-    const u = interaction.options.getUser("narys");
-    const m = interaction.options.getInteger("minutes");
-    const r = interaction.options.getString("priezastis") || "Nenurodyta";
-
-    const mem = await interaction.guild.members.fetch(u.id);
-    await mem.timeout(m * 60000, r);
-
-    interaction.reply({ content: `⏱️ ${u.tag} nutildytas`, ephemeral: true });
-
-    sendLog(interaction.guild,
-      new EmbedBuilder()
-        .setTitle("⏱️ TIMEOUT")
-        .addFields(
-          { name: "Narys", value: u.tag },
-          { name: "Staff", value: interaction.user.tag },
-          { name: "Minutės", value: m.toString() },
-          { name: "Priežastis", value: r }
-        )
-        .setColor("Yellow")
-        .setTimestamp()
-    );
+    await interaction.reply({ content: "✅ Ticket sukurtas!", ephemeral: true });
   }
 });
 
-client.login(process.env.TOKEN);
+client.login(TOKEN);
