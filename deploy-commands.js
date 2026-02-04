@@ -1,55 +1,26 @@
 const { REST, Routes, SlashCommandBuilder } = require("discord.js");
 
-const GUILD_ID = "1467894943971414062"; // tavo serverio ID
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
+const TOKEN = process.env.TOKEN;
 
 const commands = [
   new SlashCommandBuilder()
-    .setName("status")
-    .setDescription("FiveM serverio statusas"),
-
-  new SlashCommandBuilder()
-    .setName("rules")
-    .setDescription("Serverio taisyklės"),
-
-  new SlashCommandBuilder()
     .setName("ticket")
-    .setDescription("Atidaryti ticket"),
+    .setDescription("Atidaryti pagalbos ticket")
+].map(cmd => cmd.toJSON());
 
-  new SlashCommandBuilder()
-    .setName("ban")
-    .setDescription("Užblokuoti narį")
-    .addUserOption(o => o.setName("narys").setDescription("Narys").setRequired(true))
-    .addStringOption(o => o.setName("priezastis").setDescription("Priežastis")),
-
-  new SlashCommandBuilder()
-    .setName("kick")
-    .setDescription("Išmesti narį")
-    .addUserOption(o => o.setName("narys").setDescription("Narys").setRequired(true))
-    .addStringOption(o => o.setName("priezastis").setDescription("Priežastis")),
-
-  new SlashCommandBuilder()
-    .setName("timeout")
-    .setDescription("Nutildyti narį (minutėmis)")
-    .addUserOption(o => o.setName("narys").setDescription("Narys").setRequired(true))
-    .addIntegerOption(o => o.setName("minutes").setDescription("Minutės").setRequired(true))
-    .addStringOption(o => o.setName("priezastis").setDescription("Priežastis")),
-
-  new SlashCommandBuilder()
-    .setName("clear")
-    .setDescription("Išvalyti žinutes šiame kanale")
-    .addIntegerOption(o => o.setName("kiekis").setDescription("Kiek žinučių").setRequired(true))
-].map(c => c.toJSON());
-
-const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
   try {
+    console.log("🚀 Registruojamos slash komandos...");
     await rest.put(
-      Routes.applicationGuildCommands(process.env.CLIENT_ID, GUILD_ID),
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
       { body: commands }
     );
-    console.log("✅ Slash komandos užregistruotos");
-  } catch (e) {
-    console.error(e);
+    console.log("✅ Komandos įkeltos");
+  } catch (err) {
+    console.error(err);
   }
 })();
